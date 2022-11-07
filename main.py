@@ -160,6 +160,7 @@ if __name__ == "__main__":
                    num_steps=16)
         pre_model.load_state_dict({k.replace('module.', ''): v for k, v in
                              torch.load("l4_16.pth.tar")['net'].items()})
+        #导入glow模型参数，l4_16.pth.tar是glow模型参数文件
         print("pre-trained model:\n", pre_model)
     print("pre-trained model:\n", pre_model)
 
