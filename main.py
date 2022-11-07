@@ -26,7 +26,7 @@ import utils.optim_util as op
 def train(args, model, device, pattern_set, train_loader, test_loader, optimizer, Z, Y, U, V):
     model.train()
     for x, _ in train_loader:
-        #train_loader:训练数太大
+   
         x = x.to(device)
         z, sldj = model(x, reverse=False)
         glow_loss  = loss_fn(z, sldj)
@@ -61,25 +61,8 @@ def test(model, device, testloader, loss_fn, num_class=0):
                                      bpd=bits_per_dim(x, loss_meter.avg))
             progress_bar.update(x.size(0))
 
-    # Save checkpoint
-    # if loss_meter.avg < best_loss:
-    #     print('Saving...')
-    #     state = {
-    #         'net': model.state_dict(),
-    #         'test_loss': loss_meter.avg,
-    #         'epoch': args.epoch,
-    #     }
-    #     os.makedirs('ckpts', exist_ok=True)
-    #     torch.save(state, 'ckpts/' + str(num_class) + '.pth.tar'.format(epoch))
-    #     best_loss = loss_meter.avg
-
-    # Save samples and data
-    # images = sample(dodel, num_samples, device)
-    # os.makedirs('samples', exist_ok=True)
-    # os.makedirs('samples/' + str(num_class), exist_ok=True)
     return best_loss
-    # images_concat = torchvision.utils.make_grid(images, nrow=int(num_samples ** 0.5), padding=2, pad_value=255)
-    # torchvision.utils.save_image(images_concat, 'samples/'+str(num_class)+'/epoch_{}.png'.format(epoch))
+
 
 
 def retrain(args, model, mask,trainloader, device, optimizer, glow_optimizer,loss_fn):
@@ -145,7 +128,7 @@ if __name__ == "__main__":
     np.random.seed(1)
 
     use_cuda = not args.no_cuda and torch.cuda.is_available()
-    device = torch.device("cuda:1" if use_cuda else "cpu")
+    device = torch.device("cuda" if use_cuda else "cpu")
     ##########################################################################################################
 
     print('Preparing pre-trained model...')
@@ -192,28 +175,22 @@ if __name__ == "__main__":
         model.load_state_dict(torch.load('tmp_pretrained.pt'), strict=True)
     model = model.to(device)
     pre_model = pre_model.to(device)
-    if device == 'cuda':
-        model = torch.nn.DataParallel(model,[0,1])
-        cudnn.benchmark = args.benchmark
-
-
-
+   
     # History collector
     history_score = np.zeros((args.epoch + args.re_epoch + 1, 2))
 
     # Optimizer
     optimizer = PruneAdam(model.named_parameters(), lr=args.lr, eps=args.adam_epsilon)
-    #scheduler = sched.LambdaLR(optimizer, lambda s: min(1., s / args.warm_up))
+
     best_loss =1e10
+    
+    #glow计算model loss的函数
     loss_fn = op.NLLLoss().to(device)
 
     print('\nTraining...')  ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
     Z, Y, U, V = initialize_Z_Y_U_V(model)
 
-    print('Pre_model:')
-    #test(model, device, test_loader, loss_fn, 0)
-    print('Our_model:')
-    #test(model, device, test_loader, loss_fn, 0)
+
 
     for epoch in range(args.epoch):
         print("Epoch: {} with lr: {}".format(epoch + 1, args.lr))
@@ -229,7 +206,7 @@ if __name__ == "__main__":
         history_score[epoch][1] = loss
 
     create_exp_dir(args.save)
-    torch.save(model.state_dict(), os.path.join(args.save, 'glow2.pth.tar'))
+    torch.save(model.state_dict(), os.path.join(args.save, 'glow_before.pth.tar'))
 
     # Real Pruning ! ! !
     print("\nApply Pruning with connectivity & pattern set...")
@@ -240,13 +217,14 @@ if __name__ == "__main__":
         if name.split('.')[-1] == "weight" and len(param.shape) == 4:
             param.data.mul_(mask[name])
 
-    torch.save(model.state_dict(), os.path.join(args.save, 'glow2_after.pth.tar'))
+    torch.save(model.state_dict(), os.path.join(args.save, 'glow_after.pth.tar'))
 
     print("\ntesting...")
     test(model, device, test_loader, loss_fn, 0)
 
     # Optimizer for Retrain
     optimizer = PruneAdam(model.named_parameters(), lr=args.re_lr, eps=args.adam_epsilon)
+    # Optimizer for Glow,可能这里有问题
     glow_optimizer = optim.Adam(model.parameters(), lr=args.lr)
     # Fine-tuning...
     print("\nfine-tuning...")
@@ -266,7 +244,7 @@ if __name__ == "__main__":
 
         if loss < best_loss:
             best_loss = loss
-            torch.save(model.state_dict(), os.path.join(args.save, 'glow2_pruned.pth.tar'))
+            torch.save(model.state_dict(), os.path.join(args.save, 'glow_pruned.pth.tar'))
 
     np.savetxt(os.path.join(args.save, 'train_record.txt'), history_score, fmt='%10.5f', delimiter=',')
 
