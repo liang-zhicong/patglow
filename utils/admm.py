@@ -2,25 +2,28 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from .pattern_setter import *
-
+import utils.optim_util as op
 def regularized_nll_loss(args, model, output, target):
     loss = F.cross_entropy(output, target)
     return loss
 
-def admm_loss(args, device, model, Z, Y, U, V, glow_loss):
+def admm_loss(args, device, model, Z, Y, U, V, loss):
     idx = 0
     #loss = F.cross_entropy(output, target)
-
+    #计算第一项损失函数
+    #直接传入loss
     for name, param in model.named_parameters():
-        if name.split('.')[-1] == "weight" and len(param.shape) == 4 and 'downsample' not in name:
+        if name.split('.')[-1] == "weight" and name.split('.')[-2] !='mid_conv' and len(param.shape) == 4 and 'downsample' not in name:
             z = Z[idx].to(device)
             y = Y[idx].to(device)
             u = U[idx].to(device)
             v = V[idx].to(device)
 
-            glow_loss += args.rho * 0.5 * (param - z + u).norm() + args.rho * 0.5 * (param - y + v).norm()
+            P = args.rho * 0.5 * (param - z + u).norm() + args.rho * 0.5 * (param - y + v).norm()
+            loss+=P
             idx += 1
-    return glow_loss
+            #rho 惩罚参数
+    return loss
 
 
 def initialize_Z_Y_U_V(model):
@@ -29,7 +32,7 @@ def initialize_Z_Y_U_V(model):
     U = ()
     V = ()
     for name, param in model.named_parameters():
-        if name.split('.')[-1] == "weight" and len(param.shape) == 4 and 'downsample' not in name:
+        if name.split('.')[-1] == "weight" and name.split('.')[-2] !='mid_conv' and len(param.shape) == 4 and 'downsample' not in name:
             Z += (param.detach().cpu().clone(),)
             Y += (param.detach().cpu().clone(),)
             U += (torch.zeros_like(param).cpu(),)
@@ -40,7 +43,7 @@ def initialize_Z_Y_U_V(model):
 def update_X(model):
     X = ()
     for name, param in model.named_parameters():
-        if name.split('.')[-1] == "weight" and len(param.shape) == 4 and 'downsample' not in name:
+        if name.split('.')[-1] == "weight" and name.split('.')[-2] !='mid_conv' and len(param.shape) == 4 and 'downsample' not in name:
             X += (param.detach().cpu().clone(),)
     return X
 
@@ -89,17 +92,17 @@ def prune_weight(weight, device, percent, pattern_set):
     # to work with admm, we calculate percentile based on all elements instead of nonzero elements.
     weight_numpy = weight.detach().cpu().numpy()
 
-    weight_numpy = top_k_kernel(weight_numpy, percent)
-    weight_numpy = top_4_pat(weight_numpy, pattern_set)
+    weight_numpy = top_k_kernel(weight_numpy, percent)#连通性裁剪
+    weight_numpy = top_4_pat(weight_numpy, pattern_set)#3*3的kernel裁剪
     
-    mask = torch.Tensor(weight_numpy != 0).to(device)
+    mask = torch.Tensor(weight_numpy != 0).to(device)#裁剪后把矩阵中非零的置1
     return mask
 
 def apply_prune(args, model, device, pattern_set):
     # returns dictionary of non_zero_values' indices
     dict_mask = {}
     for name, param in model.named_parameters():
-        if name.split('.')[-1] == "weight" and len(param.shape) == 4 and 'downsample' not in name:
+        if name.split('.')[-1] == "weight" and name.split('.')[-2] !='mid_conv' and len(param.shape) == 4 and 'downsample' not in name:
             mask = prune_weight(param, device, args.connect_perc, pattern_set)
             param.data.mul_(mask)
             # param.data = torch.Tensor(weight_pruned).to(device)
@@ -120,7 +123,7 @@ def print_convergence(model, X, Z):
 def print_prune(model):
     prune_param, total_param = 0, 0
     for name, param in model.named_parameters():
-        if name.split('.')[-1] == "weight":
+        if name.split('.')[-1] == "weight" and name.split('.')[-2] !='mid_conv' :
             print("[at weight {}]".format(name))
             print("percentage of pruned: {:.4f}%".format(100 * (abs(param) == 0).sum().item() / param.numel()))
             print("nonzero parameters after pruning: {} / {}\n".format((param != 0).sum().item(), param.numel()))
@@ -147,7 +150,7 @@ def apply_prune_swp(args, model, device, pattern_set):
     # returns dictionary of non_zero_values' indices
     dict_mask = {}
     for name, param in model.named_parameters():
-        if name.split('.')[-1] == "weight" and len(param.shape) == 4 and 'downsample' not in name:
+        if name.split('.')[-1] == "weight" and name.split('.')[-2] !='mid_conv' and len(param.shape) == 4 and 'downsample' not in name:
             mask = prune_weight_swp(param, device, args.connect_perc, pattern_set)
             param.data.mul_(mask)
             # param.data = torch.Tensor(weight_pruned).to(device)
