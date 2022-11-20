@@ -14,6 +14,7 @@ def admm_loss(args, device, model, Z, Y, U, V, loss):
     #直接传入loss
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight" and name.split('.')[-2] !='mid_conv' and len(param.shape) == 4 and 'downsample' not in name:
+        # if name.split('.')[-1] == "weight"  and len(param.shape) == 4 and 'downsample' not in name:
             z = Z[idx].to(device)
             y = Y[idx].to(device)
             u = U[idx].to(device)
@@ -33,6 +34,7 @@ def initialize_Z_Y_U_V(model):
     V = ()
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight" and name.split('.')[-2] !='mid_conv' and len(param.shape) == 4 and 'downsample' not in name:
+        # if name.split('.')[-1] == "weight" and len(param.shape) == 4 and 'downsample' not in name:
             Z += (param.detach().cpu().clone(),)
             Y += (param.detach().cpu().clone(),)
             U += (torch.zeros_like(param).cpu(),)
@@ -44,7 +46,9 @@ def update_X(model):
     X = ()
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight" and name.split('.')[-2] !='mid_conv' and len(param.shape) == 4 and 'downsample' not in name:
+        # if name.split('.')[-1] == "weight" and len(param.shape) == 4 and 'downsample' not in name:
             X += (param.detach().cpu().clone(),)
+
     return X
 
 
@@ -103,6 +107,7 @@ def apply_prune(args, model, device, pattern_set):
     dict_mask = {}
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight" and name.split('.')[-2] !='mid_conv' and len(param.shape) == 4 and 'downsample' not in name:
+        # if name.split('.')[-1] == "weight" and len(param.shape) == 4 and 'downsample' not in name:
             mask = prune_weight(param, device, args.connect_perc, pattern_set)
             param.data.mul_(mask)
             # param.data = torch.Tensor(weight_pruned).to(device)
@@ -124,6 +129,7 @@ def print_prune(model):
     prune_param, total_param = 0, 0
     for name, param in model.named_parameters():
         if name.split('.')[-1] == "weight" and name.split('.')[-2] !='mid_conv' :
+        # if name.split('.')[-1] == "weight":
             print("[at weight {}]".format(name))
             print("percentage of pruned: {:.4f}%".format(100 * (abs(param) == 0).sum().item() / param.numel()))
             print("nonzero parameters after pruning: {} / {}\n".format((param != 0).sum().item(), param.numel()))

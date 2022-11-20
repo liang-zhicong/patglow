@@ -95,9 +95,9 @@ if __name__ == "__main__":
     parser.add_argument('--alpha', default=5e-4, type=float, help='set l2 regularization alpha')
     parser.add_argument('--adam_epsilon', default=1e-8, type=float, help='adam epsilon')
     parser.add_argument('--rho', default=0.01, type=float, help='set rho')#惩罚参数
-    parser.add_argument('--connect_perc', default=2, type=float, help='connectivity pruning ratio')#可以控制这个来控制剪枝率，3.6目前是可以剪掉70% 1是不進行連通性修剪
-    parser.add_argument('--epoch', default=30, type=int, help='set epochs')
-    parser.add_argument('--re_epoch', default=30, type=int, help='set retrain epochs')
+    parser.add_argument('--connect_perc', default=3.6, type=float, help='connectivity pruning ratio')#可以控制这个来控制剪枝率，3.6目前是可以剪掉70% 1是不進行連通性修剪
+    parser.add_argument('--epoch', default=15, type=int, help='set epochs')
+    parser.add_argument('--re_epoch', default=15, type=int, help='set retrain epochs')
     parser.add_argument('--num_sets', default='8', type=int, help='# of pattern sets')
     parser.add_argument('--exp', default='test', type=str, help='test or not')
     parser.add_argument('--l2', default=False, action='store_true', help='apply l3 regularization')
@@ -115,7 +115,7 @@ if __name__ == "__main__":
         args.exp = f'{args.exp}-{time.strftime("%y%m%d-%H%M%S")}'
     args.save = f'logs/{args.dataset}/{args.model}/{args.exp}_rho{str(args.rho)}_lr{str(args.lr)}_rls{str(args.re_lr)}_{comment}'
     create_exp_dir(args.save)
-    data = 're_epoch'+str(args.re_epoch)+'惩罚参数是'+str(args.rho)+'epoch是'+str(args.epoch)+"connect_prune:2"
+    data = 're_epoch'+str(args.re_epoch)+'惩罚参数是'+str(args.rho)+'epoch是'+str(args.epoch)+"connect_prune:3.6"+'不剪除中間層1*1的核'
     with open(os.path.join(args.save, 'canshu.txt'), 'w', encoding='utf-8') as f:
         f.write(data)
         f.close()
@@ -126,7 +126,7 @@ if __name__ == "__main__":
     np.random.seed(1)
 
     use_cuda = not args.no_cuda and torch.cuda.is_available()
-    device = torch.device("cuda:0" if use_cuda else "cpu")
+    device = torch.device("cuda:1" if use_cuda else "cpu")
     ##########################################################################################################
 
     print('Preparing pre-trained model...')#已经训练好的model
@@ -223,7 +223,8 @@ if __name__ == "__main__":
     print_prune(model)
 
     for name, param in model.named_parameters():
-        if name.split('.')[-1] == "weight" and name.split(',')[-2]!='mid_conv' and len(param.shape) == 4:
+        if name.split('.')[-1] == "weight" and name.split('.')[-2]!='mid_conv' and len(param.shape) == 4:#不剪除中間層1*1的kernel
+        # if name.split('.')[-1] == "weight" and len(param.shape) == 4:
             param.data.mul_(mask[name])#mul 对两个张量进行逐元素乘法
 
     torch.save(model.state_dict(), os.path.join(args.save, 'glow_pruned.pth.tar'))
